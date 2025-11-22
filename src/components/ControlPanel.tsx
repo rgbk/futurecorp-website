@@ -49,11 +49,34 @@ export default function ControlPanel({ controls, onChange }: ControlPanelProps) 
     }
   }
 
+  // Determine if background is light or dark
+  const isLightBackground = () => {
+    const bg = controls.backgroundColor
+    if (!bg) return false
+
+    const hex = bg.replace('#', '')
+    const r = parseInt(hex.substr(0, 2), 16)
+    const g = parseInt(hex.substr(2, 2), 16)
+    const b = parseInt(hex.substr(4, 2), 16)
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000
+
+    return brightness > 128
+  }
+
+  const isLight = isLightBackground()
+
   return (
     <>
       {/* Control Panel - Press X to toggle */}
       {isOpen && (
-        <div className="fixed bottom-20 right-6 z-40 bg-white/10 backdrop-blur-md text-white p-6 rounded-lg border border-white/20 w-80 shadow-2xl max-h-[calc(100vh-160px)] overflow-y-auto" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+        <div
+          className={`fixed bottom-20 right-6 z-40 backdrop-blur-md p-6 rounded-lg border w-80 shadow-2xl max-h-[calc(100vh-160px)] overflow-y-auto ${
+            isLight
+              ? 'bg-black/10 text-black border-black/20 light-mode'
+              : 'bg-white/10 text-white border-white/20'
+          }`}
+          style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
+        >
           <h3 className="text-xs uppercase tracking-wider mb-4 opacity-60">RGB Blob Controls</h3>
 
           <div className="space-y-4">
