@@ -1,11 +1,11 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import type { BlobControls } from './ControlPanel'
 
 interface RGBBlobsProps {
   controls: BlobControls
 }
 
-// Helper to generate random values for each blob's autonomous motion
+// Helper to generate random values for each blob's autonomous motion and response
 const generateBlobMotion = () => ({
   xOffset: Math.random() * Math.PI * 2,
   yOffset: Math.random() * Math.PI * 2,
@@ -13,33 +13,63 @@ const generateBlobMotion = () => ({
   ySpeed: 0.3 + Math.random() * 0.4,
   sizeOffset: Math.random() * Math.PI * 2,
   sizeSpeed: 0.2 + Math.random() * 0.3,
+  // Random multipliers for mouse response (can be negative for inverse movement)
+  mouseXMultiplier: (Math.random() - 0.5) * 3, // Range: -1.5 to 1.5
+  mouseYMultiplier: (Math.random() - 0.5) * 3,
+  mouseSizeMultiplier: (Math.random() - 0.5) * 2, // Range: -1 to 1
 })
 
 export default function RGBBlobs({ controls }: RGBBlobsProps) {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
   const [tilt, setTilt] = useState({ x: 0, y: 0 })
   const [time, setTime] = useState(0)
+  const [blobMotions, setBlobMotions] = useState({
+    red: generateBlobMotion(),
+    green: generateBlobMotion(),
+    blue: generateBlobMotion(),
+  })
+  const lastMousePosRef = useRef({ x: 0, y: 0 })
+  const mouseMoveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Generate unique motion patterns for each blob (only once)
-  const blobMotions = useMemo(
-    () => ({
-      red: generateBlobMotion(),
-      green: generateBlobMotion(),
-      blue: generateBlobMotion(),
-    }),
-    []
-  )
-
-  // Mouse tracking
+  // Mouse tracking with pause detection
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       const x = (e.clientX / window.innerWidth - 0.5) * 2
       const y = (e.clientY / window.innerHeight - 0.5) * 2
+
+      // Detect if mouse has paused and then moved again
+      const hasMovedSignificantly =
+        Math.abs(x - lastMousePosRef.current.x) > 0.05 ||
+        Math.abs(y - lastMousePosRef.current.y) > 0.05
+
+      if (hasMovedSignificantly) {
+        // Clear existing timer
+        if (mouseMoveTimerRef.current) {
+          clearTimeout(mouseMoveTimerRef.current)
+        }
+
+        // Set new timer - if mouse pauses for 200ms, regenerate multipliers on next move
+        mouseMoveTimerRef.current = setTimeout(() => {
+          // Mouse has paused, regenerate random multipliers for next movement
+          setBlobMotions({
+            red: generateBlobMotion(),
+            green: generateBlobMotion(),
+            blue: generateBlobMotion(),
+          })
+        }, 200)
+      }
+
+      lastMousePosRef.current = { x, y }
       setMousePos({ x, y })
     }
 
     window.addEventListener('mousemove', handleMouseMove)
-    return () => window.removeEventListener('mousemove', handleMouseMove)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      if (mouseMoveTimerRef.current) {
+        clearTimeout(mouseMoveTimerRef.current)
+      }
+    }
   }, [])
 
   // Device orientation for mobile
@@ -81,24 +111,35 @@ export default function RGBBlobs({ controls }: RGBBlobsProps) {
   const sensitivity = controls.movementSensitivity
   const motionRange = controls.motionRange
 
-  // Calculate positions and sizes for each blob
-  const calculateBlobTransform = (motion: ReturnType<typeof generateBlobMotion>, multiplier: number) => {
+  // Calculate positions and sizes for each blob with independent random response
+  const calculateBlobTransform = (motion: ReturnType<typeof generateBlobMotion>) => {
     const autonomousX = Math.sin(time * motion.xSpeed + motion.xOffset) * motionRange
     const autonomousY = Math.cos(time * motion.ySpeed + motion.yOffset) * motionRange
     const sizeVariation = Math.sin(time * motion.sizeSpeed + motion.sizeOffset) * controls.sizeChangeRange
 
+    // Each blob responds to mouse differently (can be opposite direction)
+    const mouseInfluenceX = baseX * sensitivity * motion.mouseXMultiplier
+    const mouseInfluenceY = baseY * sensitivity * motion.mouseYMultiplier
+    const mouseSizeInfluence = (Math.abs(baseX) + Math.abs(baseY)) * motion.mouseSizeMultiplier * 20
+
     return {
-      x: baseX * (sensitivity * multiplier) + autonomousX,
-      y: baseY * (sensitivity * multiplier) + autonomousY,
-      scale: 1 + sizeVariation / 100,
+      x: mouseInfluenceX + autonomousX,
+      y: mouseInfluenceY + autonomousY,
+      scale: 1 + (sizeVariation + mouseSizeInfluence) / 100,
     }
   }
 
-  const redTransform = calculateBlobTransform(blobMotions.red, 1.0)
-  const greenTransform = calculateBlobTransform(blobMotions.green, 0.85)
-  const blueTransform = calculateBlobTransform(blobMotions.blue, 0.92)
+  const redTransform = calculateBlobTransform(blobMotions.red)
+  const greenTransform = calculateBlobTransform(blobMotions.green)
+  const blueTransform = calculateBlobTransform(blobMotions.blue)
 
   const { blobSize, blurAmount, colorOpacity, backgroundColor, containerPadding, blendMode } = controls
+
+  // Calculate responsive blob size based on viewport
+  const isPortrait = typeof window !== 'undefined' && window.innerHeight > window.innerWidth
+  const viewportMin = typeof window !== 'undefined' ? Math.min(window.innerWidth, window.innerHeight) : 800
+  const responsiveBlobSize = isPortrait ? viewportMin * 0.6 : blobSize
+  const responsiveBlur = isPortrait ? blurAmount * 0.8 : blurAmount
 
   // Generate imperfect circle border-radius
   const getBorderRadius = (seed: number) => {
@@ -122,9 +163,9 @@ export default function RGBBlobs({ controls }: RGBBlobsProps) {
         <div
           className="absolute top-1/2 left-1/2 transition-all duration-[2000ms] ease-out"
           style={{
-            width: `${blobSize}px`,
-            height: `${blobSize}px`,
-            filter: `blur(${blurAmount}px)`,
+            width: `${responsiveBlobSize}px`,
+            height: `${responsiveBlobSize}px`,
+            filter: `blur(${responsiveBlur}px)`,
             background: `radial-gradient(circle, rgba(255,0,0,${colorOpacity}) 0%, rgba(255,0,0,${colorOpacity * 0.8}) 30%, rgba(255,0,0,0) 70%)`,
             mixBlendMode: blendMode as any,
             transform: `translate(-50%, -50%) translate(${redTransform.x}px, ${redTransform.y}px) scale(${redTransform.scale})`,
@@ -136,9 +177,9 @@ export default function RGBBlobs({ controls }: RGBBlobsProps) {
         <div
           className="absolute top-1/2 left-1/2 transition-all duration-[2000ms] ease-out"
           style={{
-            width: `${blobSize}px`,
-            height: `${blobSize}px`,
-            filter: `blur(${blurAmount}px)`,
+            width: `${responsiveBlobSize}px`,
+            height: `${responsiveBlobSize}px`,
+            filter: `blur(${responsiveBlur}px)`,
             background: `radial-gradient(circle, rgba(0,255,0,${colorOpacity}) 0%, rgba(0,255,0,${colorOpacity * 0.8}) 30%, rgba(0,255,0,0) 70%)`,
             mixBlendMode: blendMode as any,
             transform: `translate(-50%, -50%) translate(${greenTransform.x}px, ${greenTransform.y}px) scale(${greenTransform.scale})`,
@@ -150,9 +191,9 @@ export default function RGBBlobs({ controls }: RGBBlobsProps) {
         <div
           className="absolute top-1/2 left-1/2 transition-all duration-[2000ms] ease-out"
           style={{
-            width: `${blobSize}px`,
-            height: `${blobSize}px`,
-            filter: `blur(${blurAmount}px)`,
+            width: `${responsiveBlobSize}px`,
+            height: `${responsiveBlobSize}px`,
+            filter: `blur(${responsiveBlur}px)`,
             background: `radial-gradient(circle, rgba(0,0,255,${colorOpacity}) 0%, rgba(0,0,255,${colorOpacity * 0.8}) 30%, rgba(0,0,255,0) 70%)`,
             mixBlendMode: blendMode as any,
             transform: `translate(-50%, -50%) translate(${blueTransform.x}px, ${blueTransform.y}px) scale(${blueTransform.scale})`,

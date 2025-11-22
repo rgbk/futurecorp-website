@@ -4,7 +4,7 @@
   "movementSensitivity": 60,
   "animationSpeed": 2.6,
   "colorOpacity": 1,
-  "motionRange": 136,
+  "motionRange": 64,
   "sizeChangeRange": 10,
   "backgroundColor": "#000000",
   "containerPadding": 100,
