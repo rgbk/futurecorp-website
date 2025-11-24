@@ -8,5 +8,8 @@
   "sizeChangeRange": 10,
   "backgroundColor": "#000000",
   "containerPadding": 100,
-  "blendMode": "difference"
+  "blendMode": "difference",
+  "aspectRatioVariation": 0,
+  "rotationSpeed": 0.5,
+  "interactionIntensity": 1.0
 }

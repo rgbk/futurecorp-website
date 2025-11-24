@@ -3,6 +3,7 @@ import type { BlobControls } from './ControlPanel'
 
 interface RGBBlobsProps {
   controls: BlobControls
+  interactionPos: { x: number; y: number } | null
 }
 
 // Helper to generate random values for each blob's autonomous motion and response
@@ -19,14 +20,25 @@ const generateBlobMotion = () => ({
   mouseSizeMultiplier: (Math.random() - 0.5) * 2, // Range: -1 to 1
 })
 
-export default function RGBBlobs({ controls }: RGBBlobsProps) {
+export default function RGBBlobs({ controls, interactionPos }: RGBBlobsProps) {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
   const [tilt, setTilt] = useState({ x: 0, y: 0 })
   const [time, setTime] = useState(0)
+  const [rotation, setRotation] = useState(0)
   const [blobMotions, setBlobMotions] = useState({
     red: generateBlobMotion(),
     green: generateBlobMotion(),
     blue: generateBlobMotion(),
+  })
+  const [interactionState, setInteractionState] = useState({
+    active: false,
+    startTime: 0,
+    targetScale: 1,
+    currentScale: 1,
+    targetOffsetX: 0,
+    targetOffsetY: 0,
+    currentOffsetX: 0,
+    currentOffsetY: 0,
   })
   const lastMousePosRef = useRef({ x: 0, y: 0 })
   const mouseMoveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -101,15 +113,119 @@ export default function RGBBlobs({ controls }: RGBBlobsProps) {
   useEffect(() => {
     const interval = setInterval(() => {
       setTime((t) => t + 0.01 * controls.animationSpeed)
+      setRotation((r) => r + 0.01 * controls.rotationSpeed)
     }, 50)
     return () => clearInterval(interval)
-  }, [controls.animationSpeed])
+  }, [controls.animationSpeed, controls.rotationSpeed])
+
+  // Handle interaction (mouse/touch down)
+  useEffect(() => {
+    if (interactionPos) {
+      // Start interaction with IMMEDIATE response
+      const now = Date.now()
+      const targetScale = 1.15
+      const targetOffsetX = interactionPos.x * 30
+      const targetOffsetY = interactionPos.y * 30
+
+      setInteractionState((prev) => ({
+        ...prev,
+        active: true,
+        startTime: now,
+        targetScale,
+        targetOffsetX,
+        targetOffsetY,
+        // Set current values immediately for instant feedback
+        currentScale: 1.08, // Start partway there for immediate pop
+        currentOffsetX: targetOffsetX * 0.5, // Immediate partial movement
+        currentOffsetY: targetOffsetY * 0.5,
+      }))
+
+      // Regenerate blob motions for trajectory change
+      setBlobMotions({
+        red: generateBlobMotion(),
+        green: generateBlobMotion(),
+        blue: generateBlobMotion(),
+      })
+    } else {
+      // End interaction
+      setInteractionState((prev) => ({
+        ...prev,
+        active: false,
+      }))
+    }
+  }, [interactionPos])
+
+  // Animate interaction state with requestAnimationFrame for smoother performance
+  useEffect(() => {
+    let animationFrameId: number
+
+    const animateInteraction = () => {
+      setInteractionState((prev) => {
+        if (prev.active) {
+          const elapsed = (Date.now() - prev.startTime) / 1000
+          const duration = controls.interactionIntensity
+
+          if (elapsed < duration) {
+            // Ease out animation
+            const progress = elapsed / duration
+            const easeOut = 1 - Math.pow(1 - progress, 3)
+
+            return {
+              ...prev,
+              currentScale: 1 + (prev.targetScale - 1) * easeOut,
+              currentOffsetX: prev.targetOffsetX * easeOut,
+              currentOffsetY: prev.targetOffsetY * easeOut,
+            }
+          } else {
+            // Keep at target values while still active (held down)
+            return {
+              ...prev,
+              currentScale: prev.targetScale,
+              currentOffsetX: prev.targetOffsetX,
+              currentOffsetY: prev.targetOffsetY,
+            }
+          }
+        } else {
+          // Smooth return to normal
+          const isClose = Math.abs(prev.currentScale - 1) < 0.01 &&
+                         Math.abs(prev.currentOffsetX) < 0.5 &&
+                         Math.abs(prev.currentOffsetY) < 0.5
+
+          if (isClose) {
+            return {
+              ...prev,
+              currentScale: 1,
+              currentOffsetX: 0,
+              currentOffsetY: 0,
+            }
+          }
+
+          return {
+            ...prev,
+            currentScale: prev.currentScale * 0.85 + 1 * 0.15,
+            currentOffsetX: prev.currentOffsetX * 0.85,
+            currentOffsetY: prev.currentOffsetY * 0.85,
+          }
+        }
+      })
+
+      animationFrameId = requestAnimationFrame(animateInteraction)
+    }
+
+    animationFrameId = requestAnimationFrame(animateInteraction)
+    return () => cancelAnimationFrame(animationFrameId)
+  }, [controls.interactionIntensity, interactionState.active, interactionState.startTime])
 
   // Combine mouse/tilt with autonomous animation
   const baseX = mousePos.x || tilt.x
   const baseY = mousePos.y || tilt.y
   const sensitivity = controls.movementSensitivity
   const motionRange = controls.motionRange
+
+  // Calculate aspect ratio variation
+  const aspectVariation = controls.aspectRatioVariation / 100
+  const aspectRatioX = 1 + Math.sin(time * 0.7) * aspectVariation * 0.5
+  const aspectRatioY = 1 + Math.cos(time * 0.5) * aspectVariation * 0.5
 
   // Calculate positions and sizes for each blob with independent random response
   const calculateBlobTransform = (motion: ReturnType<typeof generateBlobMotion>) => {
@@ -122,10 +238,15 @@ export default function RGBBlobs({ controls }: RGBBlobsProps) {
     const mouseInfluenceY = baseY * sensitivity * motion.mouseYMultiplier
     const mouseSizeInfluence = (Math.abs(baseX) + Math.abs(baseY)) * motion.mouseSizeMultiplier * 20
 
+    // Add interaction offset
+    const totalX = mouseInfluenceX + autonomousX + interactionState.currentOffsetX
+    const totalY = mouseInfluenceY + autonomousY + interactionState.currentOffsetY
+    const totalScale = (1 + (sizeVariation + mouseSizeInfluence) / 100) * interactionState.currentScale
+
     return {
-      x: mouseInfluenceX + autonomousX,
-      y: mouseInfluenceY + autonomousY,
-      scale: 1 + (sizeVariation + mouseSizeInfluence) / 100,
+      x: totalX,
+      y: totalY,
+      scale: totalScale,
     }
   }
 
@@ -168,7 +289,7 @@ export default function RGBBlobs({ controls }: RGBBlobsProps) {
             filter: `blur(${responsiveBlur}px)`,
             background: `radial-gradient(circle, rgba(255,0,0,${colorOpacity}) 0%, rgba(255,0,0,${colorOpacity * 0.8}) 30%, rgba(255,0,0,0) 70%)`,
             mixBlendMode: blendMode as any,
-            transform: `translate(-50%, -50%) translate(${redTransform.x}px, ${redTransform.y}px) scale(${redTransform.scale})`,
+            transform: `translate(-50%, -50%) translate(${redTransform.x}px, ${redTransform.y}px) rotate(${rotation}rad) scale(${redTransform.scale * aspectRatioX}, ${redTransform.scale * aspectRatioY})`,
             borderRadius: getBorderRadius(1.23),
           }}
         />
@@ -182,7 +303,7 @@ export default function RGBBlobs({ controls }: RGBBlobsProps) {
             filter: `blur(${responsiveBlur}px)`,
             background: `radial-gradient(circle, rgba(0,255,0,${colorOpacity}) 0%, rgba(0,255,0,${colorOpacity * 0.8}) 30%, rgba(0,255,0,0) 70%)`,
             mixBlendMode: blendMode as any,
-            transform: `translate(-50%, -50%) translate(${greenTransform.x}px, ${greenTransform.y}px) scale(${greenTransform.scale})`,
+            transform: `translate(-50%, -50%) translate(${greenTransform.x}px, ${greenTransform.y}px) rotate(${rotation * 1.3}rad) scale(${greenTransform.scale * aspectRatioX}, ${greenTransform.scale * aspectRatioY})`,
             borderRadius: getBorderRadius(2.47),
           }}
         />
@@ -196,7 +317,7 @@ export default function RGBBlobs({ controls }: RGBBlobsProps) {
             filter: `blur(${responsiveBlur}px)`,
             background: `radial-gradient(circle, rgba(0,0,255,${colorOpacity}) 0%, rgba(0,0,255,${colorOpacity * 0.8}) 30%, rgba(0,0,255,0) 70%)`,
             mixBlendMode: blendMode as any,
-            transform: `translate(-50%, -50%) translate(${blueTransform.x}px, ${blueTransform.y}px) scale(${blueTransform.scale})`,
+            transform: `translate(-50%, -50%) translate(${blueTransform.x}px, ${blueTransform.y}px) rotate(${rotation * 0.7}rad) scale(${blueTransform.scale * aspectRatioX}, ${blueTransform.scale * aspectRatioY})`,
             borderRadius: getBorderRadius(3.71),
           }}
         />

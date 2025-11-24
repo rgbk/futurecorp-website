@@ -2,6 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Prevent selection and improve touch performance */
+body {
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  overscroll-behavior: none;
+  touch-action: manipulation; /* Fast touch responses, no 300ms delay */
+}
+
+/* Allow selection in control panel */
+#root > div > div:last-child {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+  touch-action: auto;
+}
+
 /* Custom range slider styling - Dark mode (default) */
 input[type="range"] {
   -webkit-appearance: none;

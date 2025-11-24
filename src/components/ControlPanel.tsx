@@ -12,6 +12,9 @@ export interface BlobControls {
   backgroundColor: string
   containerPadding: number
   blendMode: string
+  aspectRatioVariation: number
+  rotationSpeed: number
+  interactionIntensity: number
 }
 
 interface ControlPanelProps {
@@ -198,6 +201,53 @@ export default function ControlPanel({ controls, onChange }: ControlPanelProps) 
                 max="400"
                 value={controls.containerPadding}
                 onChange={(e) => updateControl('containerPadding', Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+
+            {/* Aspect Ratio Variation */}
+            <div>
+              <label className="text-[10px] uppercase tracking-wide block mb-2 opacity-60">
+                Aspect Ratio Variation: {controls.aspectRatioVariation}%
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={controls.aspectRatioVariation}
+                onChange={(e) => updateControl('aspectRatioVariation', Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+
+            {/* Rotation Speed */}
+            <div>
+              <label className="text-[10px] uppercase tracking-wide block mb-2 opacity-60">
+                Rotation Speed: {controls.rotationSpeed.toFixed(2)}x
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="5"
+                step="0.1"
+                value={controls.rotationSpeed}
+                onChange={(e) => updateControl('rotationSpeed', Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+
+            {/* Interaction Intensity */}
+            <div>
+              <label className="text-[10px] uppercase tracking-wide block mb-2 opacity-60">
+                Touch/Click Response: {controls.interactionIntensity.toFixed(1)}s
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="3"
+                step="0.1"
+                value={controls.interactionIntensity}
+                onChange={(e) => updateControl('interactionIntensity', Number(e.target.value))}
                 className="w-full"
               />
             </div>
