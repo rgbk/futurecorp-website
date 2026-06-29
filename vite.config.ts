@@ -12,10 +12,10 @@ export default defineConfig({
       },
       includeAssets: ['favicon.ico', 'icon-192.png', 'icon-512.png'],
       manifest: {
-        name: 'VibeCodeStack App',
-        short_name: 'VibeApp',
-        description: 'Built with VibeCodeStack template',
-        theme_color: '#000000',
+        name: 'Future Corp',
+        short_name: 'Future Corp',
+        description: 'We create digital experiences for culture and the people who define it.',
+        theme_color: '#ffffff',
         background_color: '#ffffff',
         display: 'standalone',
         icons: [
